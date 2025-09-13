@@ -9,3 +9,5 @@ Load test :
 `k6 run --out web-dashboard load_test_cpu.js`
 
 `k6 run --out json=results.json load_test_cpu.js`
+
+Endpoint for checking load test metrics during run : http://127.0.0.1:5665/ui/?endpoint=/
