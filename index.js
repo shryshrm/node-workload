@@ -55,15 +55,27 @@ async function cpuTask() {
     // Keep CPU busy with math
     x += Math.sqrt(Math.random() * 1000);
   }
+}
 
-  workloadHeap.labels('cpu_node').observe(getHeapUsedKb());
+async function constCpuTask() {
+  let x = 0;
+  const iterations = 1000000;
+
+// Example array of numbers
+  const values = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+
+  for (let i = 0; i < iterations; i++) {
+    // Pick a random value from the array each iteration
+    const r = values[Math.floor(Math.random() * values.length)];
+    x += Math.sqrt(r);
+  }
+
 }
 
 async function ioTask() {
   // simulate IO latency with random sleep (5-10 ms)
   const delay = 2.5;
   await sleep(delay);
-  workloadHeap.labels('cpu_node').observe(getHeapUsedKb());
 }
 
 async function worker(mode, ops, ratio = 0.5) {
@@ -88,7 +100,7 @@ async function worker(mode, ops, ratio = 0.5) {
       await new Promise(res => setImmediate(res));
     }
   }
-  workloadHeap.labels('cpu_node').observe(getHeapUsedKb());
+  workloadHeap.labels(mode+'_node').observe(getHeapUsedKb());
 }
 
 async function runBenchmark(mode, workers, totalOps, ratio = 0.5) {

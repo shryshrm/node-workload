@@ -8,38 +8,33 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:9091';
 const PROM_URL = __ENV.PROM_URL || 'http://localhost:9090/api/v1/query';
 const CONTAINER_ID = __ENV.TARGET_CONTAINER || null;
 const TEST_INTERVAL = '10s'; // add this at the top
+const STAGES = [
+  { duration: '10s', target: 500 },
+  { duration: '10s', target: 500 },
+  { duration: '10s', target: 0 },
+];
 
+// --- k6 load options ---
 export let options = {
   scenarios: {
-    io_scenario: {
+    load: {
       executor: 'ramping-vus',
-      exec: 'ioTest',
-      stages: [
-        { duration: '10s', target: 5000 },
-        { duration: '30s', target: 5000 },
-        { duration: '10s', target: 0 },
-      ],
+      exec: 'cpuTest',
+      stages: STAGES,
       gracefulStop: '0s',
       gracefulRampDown: '0s',
     },
   },
 };
 
+// --- Load function ---
+export function cpuTest() {
+  const url = `${BASE_URL}/cpu`;
+  const payload = JSON.stringify({ workers: 1, ops: 1 });
+  const params = { headers: { 'Content-Type': 'application/json' } };
 
-export function ioTest() {
-  const url = `${BASE_URL}/io`;
-  const payload = JSON.stringify({
-    workers: 1,
-    ops: 1,
-  });
-
-  const params = {
-    headers: { 'Content-Type': 'application/json' },
-  };
-
-  let res = http.post(url, payload, params);
-
-  check(res, { 'IO status 200': (r) => r.status === 200 });
+  const res = http.post(url, payload, params);
+  check(res, { 'status 200': (r) => r.status === 200 });
   sleep(0.1);
 }
 
@@ -73,32 +68,16 @@ export function handleSummary(data) {
 
 
   // --- RPS ---
-  let rpsQuery = `rate(workload_ops_total{type="io_java"}[${TEST_INTERVAL}])`;
+  let rpsQuery = `rate(workload_ops_total[${TEST_INTERVAL}])`;
   const rpsRes = queryPrometheus(rpsQuery);
   const rps = rpsRes && rpsRes.length > 0 ? parseFloat(rpsRes[0].value[1]) : 0;
   console.log(`RPS: ${rps.toFixed(2)}`);
 
   // --- p95 latency ---
-  let p95Query = `histogram_quantile(0.90, rate(workload_latency_seconds_bucket{type="io_java"}[${TEST_INTERVAL}]))`;
+  let p95Query = `histogram_quantile(0.90, rate(workload_latency_seconds_bucket[${TEST_INTERVAL}]))`;
   const p95Res = queryPrometheus(p95Query);
   const p95 = p95Res && p95Res.length > 0 ? parseFloat(p95Res[0].value[1]) * 1000 : 0; // convert to ms
   console.log(`p95 latency: ${p95.toFixed(2)} ms`);
-
-  // --- Add k6-native metrics ---
-  const httpReqDuration = data.metrics['http_req_duration'];
-  const httpReqs = data.metrics['http_reqs'];
-
-  if (httpReqDuration) {
-    const p95Latency = httpReqDuration.values['p(95)'] || 0;
-    console.log(`Client side p95 latency : ${p95Latency.toFixed(2)} ms`);
-  }
-
-  if (httpReqs) {
-    const totalReqs = httpReqs.values.count || 0;
-    const testDuration = data.state.testRunDurationMs / 1000; // seconds
-    const avgRPS = totalReqs / testDuration;
-    console.log(`Client side avg RPS : ${avgRPS.toFixed(2)}`);
-  }
 
   // also include default text summary
   return {
